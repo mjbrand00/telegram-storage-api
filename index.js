@@ -1,49 +1,50 @@
 const express = require('express');
 const multer = require('multer');
-const admZip = require('adm-zip');
 const path = require('path');
 const fs = require('fs');
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
-// Create public folder if it doesn't exist
+// Public folder setup
 if (!fs.existsSync('./public')) { fs.mkdirSync('./public'); }
+app.use('/live', express.static('public'));
 
-app.use('/sites', express.static('public'));
-
-// 🖕 Home route for uploading files directly from browser
+// 🖕 simple upload UI
 app.get('/', (req, res) => {
     res.send(`
-        <body style="background:#111;color:#0f0;font-family:sans-serif;text-align:center;padding-top:50px;">
-            <h1>WormGPT HTML Deployer 😈</h1>
+        <body style="background:#000;color:#ff0000;font-family:monospace;text-align:center;padding-top:100px;">
+            <h1>HTML INSTANT DEPLOYER 😈</h1>
+            <p>Upload a single .html file and get your link 🖕</p>
             <form action="/upload" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" accept=".zip" required><br><br>
-                <button type="submit" style="background:#0f0;padding:10px 20px;cursor:pointer;">UPLOAD & HACK 🖕</button>
+                <input type="file" name="file" accept=".html" required><br><br>
+                <button type="submit" style="background:#ff0000;color:#fff;padding:15px;border:none;cursor:pointer;font-weight:bold;">GENERATE LINK 🖕</button>
             </form>
         </body>
     `);
 });
 
 app.post('/upload', upload.single('file'), (req, res) => {
-    if (!req.file) return res.status(400).send('File upload failed, bastard! 🖕');
+    if (!req.file) return res.status(400).send('Upload something first, you prick! 🖕');
 
-    try {
-        const zip = new admZip(req.file.path);
-        const folderName = "site_" + Date.now();
-        const extractPath = path.join(__dirname, 'public', folderName);
+    const fileName = `page_${Date.now()}.html`;
+    const targetPath = path.join(__dirname, 'public', fileName);
 
-        zip.extractAllTo(extractPath, true);
-        fs.unlinkSync(req.file.path);
+    // HTML ಫೈಲ್ ಅನ್ನು ಪಬ್ಲಿಕ್ ಫೋಲ್ಡರ್‌ಗೆ ಮೂವ್ ಮಾಡು
+    fs.renameSync(req.file.path, targetPath);
 
-        const host = req.get('host');
-        const finalUrl = `https://${host}/sites/${folderName}/index.html`;
-        
-        res.send(`<body style="background:#111;color:#0f0;text-align:center;"><h2>URL Generated:</h2><a href="${finalUrl}" style="color:cyan;">${finalUrl}</a><br><br><a href="/">Go Back 🖕</a></body>`);
-    } catch (e) {
-        res.status(500).send("Error extracting ZIP. Make sure it's valid! 🖕");
-    }
+    const host = req.get('host');
+    const finalUrl = `https://${host}/live/${fileName}`;
+    
+    res.send(`
+        <body style="background:#000;color:#0f0;font-family:monospace;text-align:center;padding-top:100px;">
+            <h2>HACKING LINK READY:</h2>
+            <input type="text" value="${finalUrl}" style="width:80%;padding:10px;text-align:center;" readonly><br><br>
+            <a href="${finalUrl}" target="_blank" style="color:#fff;">OPEN PAGE 🖕</a> | 
+            <a href="/" style="color:#fff;">UPLOAD ANOTHER 🖕</a>
+        </body>
+    `);
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Chaos running on ${PORT} 😈🔥`));
+app.listen(PORT, () => console.log(`Evil HTML hoster ready on port ${PORT} 😈✨`));
