@@ -16,8 +16,8 @@ const io = new Server(server, {
 });
 
 // ---------- ಸ್ಟೋರ್ (In-memory) ----------
-const userSockets = {};      // socket.id -> { username, room }
-const roomUsersMap = {};    // room -> Set of usernames
+const userSockets = {};
+const roomUsersMap = {};
 
 // ---------- ಟೆಲಿಗ್ರಾಮ್ ಅಪ್ಲೋಡ್ (ನಿಮ್ಮ ಹಳೆಯ ಕೋಡ್) ----------
 const upload = multer({ storage: multer.memoryStorage() });
@@ -61,7 +61,6 @@ io.on('connection', (socket) => {
 
     // 1️⃣ ಯೂಸರ್ ರೂಮ್‌ಗೆ ಜಾಯಿನ್ ಆಗುವುದು
     socket.on('join', ({ username, room }) => {
-        // ಹಳೆಯ ರೂಮ್ ಇದ್ದರೆ ಅದರಿಂದ ತೆಗೆಯಿರಿ
         if (userSockets[socket.id]) {
             const oldRoom = userSockets[socket.id].room;
             if (roomUsersMap[oldRoom]) {
@@ -70,19 +69,17 @@ io.on('connection', (socket) => {
             }
         }
 
-        // ಹೊಸ ರೂಮ್‌ಗೆ ಸೇರಿಸಿ
         socket.join(room);
         userSockets[socket.id] = { username, room };
 
         if (!roomUsersMap[room]) roomUsersMap[room] = new Set();
         roomUsersMap[room].add(username);
 
-        // ಆ ರೂಮ್‌ನಲ್ಲಿರುವ ಎಲ್ಲರಿಗೂ ಅಪ್ಡೇಟೆಡ್ ಯೂಸರ್ ಲಿಸ್ಟ್ ಕಳುಹಿಸಿ
         io.to(room).emit('room_users', { users: Array.from(roomUsersMap[room]) });
         console.log(`📥 ${username} joined ${room}`);
     });
 
-    // 2️⃣ ಮೆಸೇಜ್ ಕಳುಹಿಸುವುದು (ಅದೇ ರೂಮ್‌ಗೆ ಮಾತ್ರ)
+    // 2️⃣ ಮೆಸೇಜ್ ಕಳುಹಿಸುವುದು
     socket.on('message', ({ user, room, text }) => {
         const userData = userSockets[socket.id];
         if (!userData) return;
@@ -93,30 +90,27 @@ io.on('connection', (socket) => {
             time: new Date().toISOString()
         };
 
-        // ಆ ರೂಮ್‌ನಲ್ಲಿರುವ ಎಲ್ಲರಿಗೂ 'message' ಈವೆಂಟ್ ರವಾನಿಸಿ
         io.to(room).emit('message', messageData);
     });
 
-    // 3️⃣ ಆಡ್ಮಿನ್ ಬ್ರಾಡ್ಕಾಸ್ಟ್ (ಎಲ್ಲಾ ರೂಮ್‌ಗಳಿಗೂ)
+    // 3️⃣ ಆಡ್ಮಿನ್ ಬ್ರಾಡ್ಕಾಸ್ಟ್
     socket.on('broadcast', ({ text, from }) => {
         const broadcastData = {
             text: text,
             from: from || 'Admin',
             time: new Date().toISOString()
         };
-        // ಎಲ್ಲಾ ಕನೆಕ್ಟ್ ಆದ ಯೂಸರ್‌ಗಳಿಗೂ ಕಳುಹಿಸಿ
         io.emit('broadcast', broadcastData);
         console.log(`📢 Broadcast: ${text}`);
     });
 
-    // 4️⃣ ಯೂಸರ್ ಡಿಸ್ಕನೆಕ್ಟ್ ಆದಾಗ
+    // 4️⃣ ಡಿಸ್ಕನೆಕ್ಟ್
     socket.on('disconnect', () => {
         const userData = userSockets[socket.id];
         if (userData) {
             const { username, room } = userData;
             if (roomUsersMap[room]) {
                 roomUsersMap[room].delete(username);
-                // ಆ ರೂಮ್‌ನ ಯೂಸರ್ ಲಿಸ್ಟ್ ಅಪ್ಡೇಟ್ ಮಾಡಿ
                 io.to(room).emit('room_users', { users: Array.from(roomUsersMap[room]) });
             }
             delete userSockets[socket.id];
