@@ -5,6 +5,7 @@ const axios = require('axios');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
+const mongoose = require('mongoose');
 
 const app = express();
 app.use(cors());
@@ -15,11 +16,29 @@ const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// ---------- ಸ್ಟೋರ್ (In-memory) ----------
+// ============ MongoDB Connection ============
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/chatdb';
+mongoose.connect(MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+}).then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ MongoDB Error:', err));
+
+// ============ Message Model (Inline) ============
+const MessageSchema = new mongoose.Schema({
+    user: { type: String, required: true },
+    room: { type: String, required: true },
+    text: { type: String, required: true },
+    time: { type: Date, default: Date.now },
+    isBroadcast: { type: Boolean, default: false }
+});
+const Message = mongoose.model('Message', MessageSchema);
+
+// ============ In-memory for online users ============
 const userSockets = {};
 const roomUsersMap = {};
 
-// ---------- ಟೆಲಿಗ್ರಾಮ್ ಅಪ್ಲೋಡ್ (ನಿಮ್ಮ ಹಳೆಯ ಕೋಡ್) ----------
+// ============ Telegram Upload ============
 const upload = multer({ storage: multer.memoryStorage() });
 app.post('/upload', upload.single('file'), async (req, res) => {
     try {
@@ -51,16 +70,28 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     }
 });
 
+// ============ API: Get chat history ============
+app.get('/api/messages/:room', async (req, res) => {
+    try {
+        const room = req.params.room;
+        const messages = await Message.find({ room }).sort({ time: 1 }).limit(100);
+        res.json(messages);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/', (req, res) => {
     res.send('Real-time Storage & Chat API is running!');
 });
 
-// ---------- 🔥 ರಿಯಲ್-ಟೈಮ್ ಚಾಟ್ ಸಾಕೆಟ್ ಲಾಜಿಕ್ ----------
+// ============ 🔥 Socket.IO with Permanent Storage ============
 io.on('connection', (socket) => {
     console.log('🟢 User connected:', socket.id);
 
-    // 1️⃣ ಯೂಸರ್ ರೂಮ್‌ಗೆ ಜಾಯಿನ್ ಆಗುವುದು
-    socket.on('join', ({ username, room }) => {
+    // 1️⃣ Join room & load history
+    socket.on('join', async ({ username, room }) => {
+        // Remove from old room
         if (userSockets[socket.id]) {
             const oldRoom = userSockets[socket.id].room;
             if (roomUsersMap[oldRoom]) {
@@ -77,34 +108,58 @@ io.on('connection', (socket) => {
 
         io.to(room).emit('room_users', { users: Array.from(roomUsersMap[room]) });
         console.log(`📥 ${username} joined ${room}`);
+
+        // 🔥 Load last 50 messages from DB
+        try {
+            const history = await Message.find({ room }).sort({ time: 1 }).limit(50);
+            socket.emit('chat_history', history);
+        } catch (err) {
+            console.error('History error:', err);
+        }
     });
 
-    // 2️⃣ ಮೆಸೇಜ್ ಕಳುಹಿಸುವುದು
-    socket.on('message', ({ user, room, text }) => {
+    // 2️⃣ Message - Save to DB & Broadcast
+    socket.on('message', async ({ user, room, text }) => {
         const userData = userSockets[socket.id];
         if (!userData) return;
 
         const messageData = {
             user: userData.username,
+            room: room,
             text: text,
-            time: new Date().toISOString()
+            time: new Date()
         };
 
-        io.to(room).emit('message', messageData);
+        // 🔥 Save to MongoDB
+        try {
+            const saved = await Message.create(messageData);
+            // Broadcast to room
+            io.to(room).emit('message', saved);
+        } catch (err) {
+            console.error('Save error:', err);
+        }
     });
 
-    // 3️⃣ ಆಡ್ಮಿನ್ ಬ್ರಾಡ್ಕಾಸ್ಟ್
-    socket.on('broadcast', ({ text, from }) => {
+    // 3️⃣ Broadcast - Save & Send to all rooms
+    socket.on('broadcast', async ({ text, from }) => {
         const broadcastData = {
+            user: '📢 Admin',
+            room: 'all',
             text: text,
-            from: from || 'Admin',
-            time: new Date().toISOString()
+            time: new Date(),
+            isBroadcast: true
         };
-        io.emit('broadcast', broadcastData);
-        console.log(`📢 Broadcast: ${text}`);
+
+        // 🔥 Save to DB
+        try {
+            const saved = await Message.create(broadcastData);
+            io.emit('broadcast', { text: saved.text, from: from || 'Admin', time: saved.time });
+        } catch (err) {
+            console.error('Broadcast save error:', err);
+        }
     });
 
-    // 4️⃣ ಡಿಸ್ಕನೆಕ್ಟ್
+    // 4️⃣ Disconnect
     socket.on('disconnect', () => {
         const userData = userSockets[socket.id];
         if (userData) {
@@ -114,9 +169,7 @@ io.on('connection', (socket) => {
                 io.to(room).emit('room_users', { users: Array.from(roomUsersMap[room]) });
             }
             delete userSockets[socket.id];
-            console.log(`🔴 ${username} disconnected from ${room}`);
-        } else {
-            console.log('🔴 User disconnected:', socket.id);
+            console.log(`🔴 ${username} disconnected`);
         }
     });
 });
