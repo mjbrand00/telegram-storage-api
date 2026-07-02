@@ -1,167 +1,183 @@
 /**
- * 🧠 UNLIMITED LOCAL AI SERVER + BEAUTIFUL UI
- * No API Keys | No Limits | Private & Free
- * Requires: Ollama installed on your VPS
+ * 🌍 OMEGA SELF-SOVEREIGN CORE
+ * Zero-API-Key | Self-Hosted DB | Local Intelligence
+ * Single File Architecture
  */
 
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-
-const PORT = process.env.PORT || 4000;
-const OLLAMA_API = 'http://localhost:11434'; // Default Ollama port
-const MODEL = 'llama3'; // You can change to 'mistral', 'gemma', etc.
-
-const app = express();
-app.use(cors());
-app.use(express.json());
+const { Telegraf } = require('telegraf');
+const Database = require('better-sqlite3');
+const fs = require('fs');
+const path = require('path');
 
 // ==========================================
-// 1. AI CHAT ENDPOINT
+// 🔒 CONFIGURATION (No External Keys Needed)
 // ==========================================
-app.post('/api/chat', async (req, res) => {
-    try {
-        const { message, history = [] } = req.body;
-        
-        // Send request to local Ollama
-        const response = await axios.post(`${OLLAMA_API}/api/chat`, {
-            model: MODEL,
-            messages: [
-                ...history, // Previous context for memory
-                { role: 'user', content: message }
-            ],
-            stream: false // Get full response at once
-        });
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const PORT = process.env.PORT || 3000;
+const DB_PATH = path.join(__dirname, 'omega_core.db');
 
-        res.json({ 
-            success: true, 
-            reply: response.data.message.content,
-            model: MODEL 
-        });
-    } catch (error) {
-        console.error('AI Error:', error.message);
-        res.status(500).json({ 
-            success: false, 
-            error: 'AI is thinking... Please ensure Ollama is running!' 
-        });
+if (!BOT_TOKEN) {
+    console.error('⚠️ TELEGRAM_BOT_TOKEN is required in Environment Variables.');
+    process.exit(1);
+}
+
+// ==========================================
+# 🗄️ SELF-HOSTED DATABASE ENGINE (SQLite)
+// ==========================================
+const db = new Database(DB_PATH);
+
+// Initialize Tables
+db.exec(`
+    CREATE TABLE IF NOT EXISTS global_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT DEFAULT (datetime('now')),
+        user_id TEXT NOT NULL,
+        command TEXT NOT NULL,
+        payload TEXT,
+        status TEXT DEFAULT 'success'
+    );
+    
+    CREATE TABLE IF NOT EXISTS system_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+`);
+
+// Helper Functions
+function logEvent(userId, command, payload = null) {
+    const stmt = db.prepare('INSERT INTO global_logs (user_id, command, payload) VALUES (?, ?, ?)');
+    stmt.run(String(userId), command, JSON.stringify(payload));
+}
+function getConfig(key) {
+    const row = db.prepare('SELECT value FROM system_config WHERE key = ?').get(key);
+    return row ? row.value : null;
+}
+
+function setConfig(key, value) {
+    db.prepare('INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)').run(key, String(value));
+}
+
+// ==========================================
+# 🤖 TELEGRAM BOT & LOCAL INTELLIGENCE
+// ==========================================
+const bot = new Telegraf(BOT_TOKEN);
+
+// Local AI Response Generator (No API Key)
+function generateLocalResponse(command, args) {
+    const responses = {
+        '/start': '🌍 *OMEGA SELF-SOVEREIGN CORE ONLINE*\n\n✅ No External APIs\n✅ Self-Hosted Database\n✅ Zero Configuration\n\nType /help for commands.',
+        '/help': '📜 *AVAILABLE COMMANDS*\n/status - System Health\n/set [key] [val] - Store Data\n/get [key] - Retrieve Data\n/logs - Recent Activity\n/purge - Clear Logs',
+        '/status': () => {
+            const logCount = db.prepare('SELECT COUNT(*) as count FROM global_logs').get().count;
+            const dbSize = fs.statSync(DB_PATH).size;
+            return `📊 *SYSTEM STATUS*\n━━━━━━━━━━━━━━━\n🗄️ DB Records: ${logCount}\n DB Size: ${(dbSize/1024).toFixed(2)} KB\n⚡ Uptime: ${Math.floor(process.uptime())}s\n🔒 Security: SELF-SOVEREIGN\n━━━━━━━━━━━━━━━`;
+        },
+        '/set': (args) => {
+            if (args.length < 2) return '⚠️ Usage: /set [key] [value]';
+            setConfig(args[0], args.slice(1).join(' '));
+            return `✅ Stored: ${args[0]} = ${args.slice(1).join(' ')}`;
+        },
+        '/get': (args) => {
+            if (!args[0]) return '⚠️ Usage: /get [key]';
+            const val = getConfig(args[0]);
+            return val ? ` ${args[0]}: ${val}` : `❌ Key '${args[0]}' not found.`;
+        },
+        '/logs': () => {
+            const logs = db.prepare('SELECT * FROM global_logs ORDER BY id DESC LIMIT 5').all();
+            if (logs.length === 0) return '📭 No recent logs.';
+            return '📋 *RECENT LOGS*\n' + logs.map(l => `• ${l.command} by ${l.user_id}`).join('\n');
+        },
+        '/purge': () => {
+            db.prepare('DELETE FROM global_logs').run();
+            return ' All logs purged. Fresh start.';
+        }
+    };
+
+    const handler = responses[command];
+    if (typeof handler === 'function') return handler(args);
+    return handler || `❓ Unknown command: ${command}. Type /help`;
+}
+// Bot Commands
+bot.start((ctx) => {
+    ctx.reply(generateLocalResponse('/start'));
+    logEvent(ctx.chat.id, '/start');
+});
+
+bot.help((ctx) => {
+    ctx.reply(generateLocalResponse('/help'));
+    logEvent(ctx.chat.id, '/help');
+});
+
+bot.command('status', (ctx) => {
+    ctx.reply(generateLocalResponse('/status'));
+    logEvent(ctx.chat.id, '/status');
+});
+
+bot.command('set', (ctx) => {
+    const args = ctx.message.text.split(' ').slice(1);
+    ctx.reply(generateLocalResponse('/set', args));
+    logEvent(ctx.chat.id, '/set', args);
+});
+
+bot.command('get', (ctx) => {
+    const args = ctx.message.text.split(' ').slice(1);
+    ctx.reply(generateLocalResponse('/get', args));
+    logEvent(ctx.chat.id, '/get', args);
+});
+
+bot.command('logs', (ctx) => {
+    ctx.reply(generateLocalResponse('/logs'));
+    logEvent(ctx.chat.id, '/logs');
+});
+
+bot.command('purge', (ctx) => {
+    ctx.reply(generateLocalResponse('/purge'));
+    logEvent(ctx.chat.id, '/purge');
+});
+
+// Catch-all for unknown commands
+bot.on('text', (ctx) => {
+    const text = ctx.message.text;
+    if (text.startsWith('/')) {
+        const [cmd, ...args] = text.split(' ');
+        ctx.reply(generateLocalResponse(cmd, args));
+        logEvent(ctx.chat.id, cmd, args);
     }
 });
 
-// ==========================================// 2. BEAUTIFUL CHAT UI (Single File)
+// Error Handlerbot.catch((err) => {
+    console.error(' OMEGA ERROR:', err.message);
+});
+
 // ==========================================
-app.get('/', (req, res) => {
-    res.send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖 My Private AI</title>
-    <style>
-        :root { --bg: #0f172a; --card: #1e293b; --primary: #6366f1; --text: #f8fafc; }
-        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
-        
-        /* Header */
-        header { padding: 15px 20px; background: var(--card); border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 10px; }
-        .logo { width: 35px; height: 35px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-        h1 { margin: 0; font-size: 1.2rem; font-weight: 600; }
-        .badge { font-size: 0.7rem; background: #10b981; padding: 2px 8px; border-radius: 10px; }
+# 🚀 LAUNCH SEQUENCE
+// ==========================================
+console.log('⏳ Initializing OMEGA SELF-SOVEREIGN CORE...');
+console.log('🗄️ Mounting Local SQLite Database...');
+console.log(`💾 DB Path: ${DB_PATH}`);
 
-        /* Chat Area */
-        #chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
-        .msg { max-width: 80%; padding: 12px 16px; border-radius: 18px; line-height: 1.5; font-size: 0.95rem; word-wrap: break-word; animation: popIn 0.3s ease; }
-        .user-msg { align-self: flex-end; background: var(--primary); border-bottom-right-radius: 4px; }
-        .ai-msg { align-self: flex-start; background: var(--card); border-bottom-left-radius: 4px; border: 1px solid #334155; }
-        .typing { opacity: 0.7; font-style: italic; font-size: 0.8rem; margin-left: 10px; }
+try {
+    db.prepare('SELECT 1').get(); // Test DB
+    console.log('✅ DATABASE MOUNTED SUCCESSFULLY');
+} catch (e) {
+    console.error(' DATABASE FAILED:', e.message);
+    process.exit(1);
+}
 
-        /* Input Area */
-        .input-area { padding: 15px 20px; background: var(--card); display: flex; gap: 10px; border-top: 1px solid #334155; }
-        input { flex: 1; padding: 12px 15px; border-radius: 25px; border: 1px solid #475569; background: #0f172a; color: white; outline: none; font-size: 1rem; transition: 0.3s; }
-        input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
-        button { padding: 0 20px; border-radius: 25px; border: none; background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:hover { transform: scale(1.05); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        @keyframes popIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @media (max-width: 600px) { .msg { max-width: 90%; } }
-    </style>
-</head>
-<body>
-    <header>
-        <div class="logo">🧠</div>
-        <h1>Private AI <span class="badge">UNLIMITED</span></h1>
-    </header>
-
-    <div id="chat-box">
-        <div class="msg ai-msg">Hello! I'm your private AI. Ask me anything, I have no limits! 🚀</div>
-    </div>
-
-    <div class="input-area">
-        <input type="text" id="user-input" placeholder="Type your message..." autocomplete="off">        <button id="send-btn">Send</button>
-    </div>
-
-    <script>
-        const chatBox = document.getElementById('chat-box');
-        const input = document.getElementById('user-input');
-        const btn = document.getElementById('send-btn');
-        let history = [];
-
-        async function sendMessage() {
-            const text = input.value.trim();
-            if (!text) return;
-
-            // Add User Message
-            addMessage(text, 'user');
-            input.value = '';
-            btn.disabled = true;
-            
-            // Show Typing Indicator
-            const typingDiv = document.createElement('div');
-            typingDiv.className = 'typing';
-            typingDiv.innerText = 'AI is thinking...';
-            chatBox.appendChild(typingDiv);
-            chatBox.scrollTop = chatBox.scrollHeight;
-
-            try {
-                const res = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, history })
-                });
-                const data = await res.json();
-                
-                typingDiv.remove();
-                if (data.success) {
-                    addMessage(data.reply, 'ai');
-                    history.push({ role: 'user', content: text });
-                    history.push({ role: 'assistant', content: data.reply });
-                } else {
-                    addMessage('Error: ' + data.error, 'ai');
-                }
-            } catch (err) {
-                typingDiv.remove();
-                addMessage('Connection failed. Is Ollama running?', 'ai');
-            } finally {
-                btn.disabled = false;
-                input.focus();
-            }
-        }
-        function addMessage(text, type) {
-            const div = document.createElement('div');
-            div.className = \`msg \${type === 'user' ? 'user-msg' : 'ai-msg'}\`;
-            div.innerText = text;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-
-        btn.addEventListener('click', sendMessage);
-        input.addEventListener('keypress', (e) => e.key === 'Enter' && sendMessage());
-    </script>
-</body>
-</html>`);
+console.log(` LAUNCHING ON PORT ${PORT}...`);
+bot.launch({
+    webhook: {
+        domain: process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`,
+        path: `/webhook/${BOT_TOKEN}`
+    }
+}).then(() => {
+    console.log('✅ OMEGA SELF-SOVEREIGN CORE IS LIVE');
+    console.log('🔒 NO EXTERNAL DEPENDENCIES | FULL CONTROL');
+}).catch(e => {
+    console.error('Launch failed:', e);
+    process.exit(1);
 });
 
-// START SERVER
-app.listen(PORT, () => {
-    console.log(`\n🧠 AI SERVER LIVE: http://localhost:${PORT}`);
-    console.log(`💡 Make sure Ollama is running: ollama serve\n`);
-});
+// Graceful Shutdown
+process.once('SIGINT', () => { db.close(); bot.stop('SIGINT'); });
+process.once('SIGTERM', () => { db.close(); bot.stop('SIGTERM'); });
