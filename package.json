@@ -1,7 +1,7 @@
 {
   "name": "omega-infinity-core",
-  "version": "1.0.0",
-  "description": "Omega Infinity Core - Dating App Backend",
+  "version": "2.0",
+  "description": "Omega Infinity Core - Dating App Backend with Permanent Chat",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
