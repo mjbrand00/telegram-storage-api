@@ -28,8 +28,26 @@ app.use(cors());
 app.use(express.json());
 app.use('/vault', express.static(STORAGE_ROOT));
 
-function saveMetadata(data) {
-    fs.writeFileSync(METADATA_FILE, JSON.stringify(data, null, 2));
+app.get('/', function(req, res) {
+    res.json({
+        status: '🌍 OMEGA INFINITY CORE ONLINE',
+        version: '1.0.0',
+        features: [
+            'Real-time Chat (Socket.io)',
+            'File Upload (Images/Audio)',
+            'Unlimited Storage',
+            'User Isolated Vaults'
+        ],
+        endpoints: {
+            'Upload File': 'POST /api/upload (Header: x-user-id)',
+            'Get Files': 'GET /api/files/:userId',
+            'Chat': 'Socket.io Connection'
+        },
+        message: 'Your Dating Empire Backend is Ready!'
+    });
+});
+
+function saveMetadata(data) {    fs.writeFileSync(METADATA_FILE, JSON.stringify(data, null, 2));
 }
 
 function getMetadata() {
@@ -47,7 +65,8 @@ const storage = multer.diskStorage({
         
         if (file.mimetype.startsWith('image')) {
             typeFolder = 'images';
-        } else if (file.mimetype.startsWith('audio')) {            typeFolder = 'audio';
+        } else if (file.mimetype.startsWith('audio')) {
+            typeFolder = 'audio';
         }
         
         const finalPath = path.join(STORAGE_ROOT, userId, typeFolder);
@@ -77,8 +96,7 @@ app.post('/api/upload', upload.single('file'), function(req, res) {
     
     const metadata = getMetadata();
     metadata.push({
-        id: Date.now(),
-        userId: userId,
+        id: Date.now(),        userId: userId,
         fileName: fileName,
         url: fileUrl,
         type: req.file.mimetype,
@@ -96,7 +114,8 @@ app.post('/api/upload', upload.single('file'), function(req, res) {
 
 app.get('/api/files/:userId', function(req, res) {
     const metadata = getMetadata();
-    const userFiles = metadata.filter(function(f) {        return f.userId === req.params.userId;
+    const userFiles = metadata.filter(function(f) {
+        return f.userId === req.params.userId;
     });
     res.json({ success: true, files: userFiles });
 });
