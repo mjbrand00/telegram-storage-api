@@ -1,5 +1,5 @@
 /**
- * 🌍 OMEGA INFINITY CORE - SINGLE FILE EDITION
+ * OMEGA INFINITY CORE - SINGLE FILE EDITION
  * No VPS Headache | Render Compatible | All-in-One
  */
 
@@ -11,9 +11,7 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 
-// ==========================================
-// ⚙️ CONFIGURATION
-// ==========================================
+// CONFIGURATION
 const PORT = process.env.PORT || 3000;
 const STORAGE_ROOT = path.join(__dirname, 'omega_vault');
 const METADATA_FILE = path.join(__dirname, 'files_metadata.json');
@@ -25,18 +23,15 @@ if (!fs.existsSync(METADATA_FILE)) fs.writeFileSync(METADATA_FILE, JSON.stringif
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: "*" }, // Allow any website/app to connect
-    maxHttpBufferSize: 1e8 // Allow files up to 100MB
+    cors: { origin: "*" },
+    maxHttpBufferSize: 1e8
 });
 
 app.use(cors());
 app.use(express.json());
-// Serve static files from the vault
 app.use('/vault', express.static(STORAGE_ROOT));
 
-// ==========================================
-// 💾 SIMPLE FILE DATABASE (JSON)
-// ==========================================
+// SIMPLE FILE DATABASE (JSON)
 function saveMetadata(data) {
     fs.writeFileSync(METADATA_FILE, JSON.stringify(data, null, 2));
 }
@@ -48,16 +43,13 @@ function getMetadata() {
         return [];
     }
 }
-// ==========================================
-//  FILE UPLOAD ENGINE
-// ==========================================
+
+// FILE UPLOAD ENGINE
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const userId = req.headers['x-user-id'] || 'public';
-        const userFolder = path.join(STORAGE_ROOT, userId);
+        const userId = req.headers['x-user-id'] || 'public';        const userFolder = path.join(STORAGE_ROOT, userId);
         if (!fs.existsSync(userFolder)) fs.mkdirSync(userFolder, { recursive: true });
         
-        // Organize by type
         let typeFolder = 'misc';
         if (file.mimetype.startsWith('image')) typeFolder = 'images';
         if (file.mimetype.startsWith('audio')) typeFolder = 'audio';
@@ -83,10 +75,8 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     const fileName = req.file.filename;
     const typeFolder = req.file.destination.split(path.sep).pop();
     
-    // Create URL
     const fileUrl = `/vault/${userId}/${typeFolder}/${fileName}`;
     
-    // Save to Metadata
     const metadata = getMetadata();
     metadata.push({
         id: Date.now(),
@@ -96,7 +86,8 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
         type: req.file.mimetype,
         uploadedAt: new Date().toISOString()
     });
-    saveMetadata(metadata);    
+    saveMetadata(metadata);
+    
     res.json({
         success: true,
         message: 'File secured in Omega Vault',
@@ -105,18 +96,15 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     });
 });
 
-// API: Get User Files
-app.get('/api/files/:userId', (req, res) => {
+// API: Get User Filesapp.get('/api/files/:userId', (req, res) => {
     const metadata = getMetadata();
     const userFiles = metadata.filter(f => f.userId === req.params.userId);
     res.json({ success: true, files: userFiles });
 });
 
-// ==========================================
-// 💬 REAL-TIME CHAT ENGINE
-// ==========================================
+// REAL-TIME CHAT ENGINE
 io.on('connection', (socket) => {
-    console.log(`🔗 Connected: ${socket.id}`);
+    console.log(`Connected: ${socket.id}`);
 
     socket.on('join_room', (roomId) => {
         socket.join(roomId);
@@ -124,7 +112,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('send_message', (data) => {
-        // data: { roomId, sender, text, mediaUrl?, type: 'text'|'image'|'audio' }
         io.to(data.roomId).emit('receive_message', data);
     });
 
@@ -137,12 +124,10 @@ io.on('connection', (socket) => {
     });
 });
 
-// ==========================================
-# 🚀 LAUNCH
-// ==========================================
+// LAUNCH SEQUENCE
 server.listen(PORT, () => {
-    console.log(`🌍 OMEGA INFINITY CORE ONLINE`);
-    console.log(` Port: ${PORT}`);
-    console.log(` Storage: ${STORAGE_ROOT}`);
-    console.log(` Ready for your Dating Empire!`);
+    console.log(`OMEGA INFINITY CORE ONLINE`);
+    console.log(`Port: ${PORT}`);
+    console.log(`Storage: ${STORAGE_ROOT}`);
+    console.log(`Ready for your Dating Empire!`);
 });
