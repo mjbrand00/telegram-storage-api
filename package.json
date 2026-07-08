@@ -1,20 +1,20 @@
-cat > ~/YOUTUBEAPI/package.json << 'EOF'
 {
-  "name": "music-api",
+  "name": "omega-music-api",
   "version": "1.0.0",
-  "description": "Music API for JioSaavn with UI",
+  "description": "Music API for Omega Dating App - JioSaavn + YouTube Music",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "nodemon index.js"
   },
   "dependencies": {
-    "axios": "^1.7.0",
+    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "express": "^4.18.2"
+    "axios": "^1.6.0",
+    "yt-search": "^2.10.4",
+    "jiosaavn-api": "^1.1.2"
   },
   "engines": {
     "node": ">=16.0.0"
   }
 }
-EOF
